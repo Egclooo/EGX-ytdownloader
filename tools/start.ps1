@@ -7,6 +7,8 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $UpdateResult = Join-Path $RepoRoot ".update-result"
 $InstallerCache = Join-Path $RepoRoot ".installer-cache"
+$RequiredPythonMajor = 3
+$RequiredPythonMinor = 12
 $PythonInstallerUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
 $GitInstallerUrl = "https://github.com/git-for-windows/git/releases/latest/download/Git-64-bit.exe"
 
@@ -52,16 +54,31 @@ function Run-Installer {
   Refresh-Path
 }
 
+function Test-PythonVersion {
+  param([string]$PythonExe)
+
+  if (-not $PythonExe -or -not (Test-Path -LiteralPath $PythonExe)) {
+    return $false
+  }
+
+  try {
+    $version = & $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+    return $version -eq "$RequiredPythonMajor.$RequiredPythonMinor"
+  } catch {
+    return $false
+  }
+}
+
 function Find-Python {
   $commands = @(
-    { py -3 -c "import sys; print(sys.executable)" 2>$null },
-    { python -c "import sys; print(sys.executable)" 2>$null }
+    { py -3.12 -c "import sys; print(sys.executable)" 2>$null },
+    { python -c "import sys; print(sys.executable if sys.version_info[:2] == (3, 12) else '')" 2>$null }
   )
 
   foreach ($command in $commands) {
     try {
       $candidate = (& $command | Select-Object -First 1)
-      if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+      if ($candidate -and (Test-PythonVersion -PythonExe $candidate)) {
         return $candidate
       }
     } catch {
@@ -79,11 +96,12 @@ function Find-Python {
     if (-not $root) {
       continue
     }
-    $candidate = Get-ChildItem -Path $root -Filter python.exe -Recurse -ErrorAction SilentlyContinue |
-      Sort-Object FullName -Descending |
-      Select-Object -First 1
-    if ($candidate) {
-      return $candidate.FullName
+    $candidates = Get-ChildItem -Path $root -Filter python.exe -Recurse -ErrorAction SilentlyContinue |
+      Sort-Object FullName -Descending
+    foreach ($candidate in $candidates) {
+      if (Test-PythonVersion -PythonExe $candidate.FullName) {
+        return $candidate.FullName
+      }
     }
   }
 
@@ -120,7 +138,7 @@ function Ensure-Python {
     $python = Find-Python
   }
   if (-not $python) {
-    throw "Python was installed, but this launcher could not find python.exe. Open a new terminal and run start.bat again."
+    throw "Python 3.12 was installed, but this launcher could not find python.exe. Open a new terminal and run start.bat again."
   }
   return $python
 }
@@ -159,9 +177,25 @@ function Ensure-Git {
 function Ensure-Venv {
   param([string]$PythonExe)
 
+  $venvDir = Join-Path $RepoRoot ".venv"
+  if (
+    (Test-Path -LiteralPath $venvDir) -and
+    (
+      -not (Test-Path -LiteralPath $VenvPython) -or
+      -not (Test-PythonVersion -PythonExe $VenvPython)
+    )
+  ) {
+    Write-Step "Removing virtual environment created with the wrong Python version"
+    $resolvedVenv = Resolve-Path -LiteralPath $venvDir
+    if (-not $resolvedVenv.Path.StartsWith($RepoRoot.Path)) {
+      throw "Refusing to remove virtual environment outside the project folder."
+    }
+    Remove-Item -LiteralPath $resolvedVenv.Path -Recurse -Force
+  }
+
   if (-not (Test-Path -LiteralPath $VenvPython)) {
     Write-Step "Creating virtual environment"
-    & $PythonExe -m venv (Join-Path $RepoRoot ".venv")
+    & $PythonExe -m venv $venvDir
     if ($LASTEXITCODE -ne 0) {
       throw "Could not create the virtual environment."
     }
