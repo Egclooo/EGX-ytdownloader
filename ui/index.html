@@ -23,16 +23,26 @@
         <form id="downloadForm" class="form" novalidate>
           <label class="field url-field" id="urlField">
             <span>YouTube URL</span>
-            <input
+            <textarea
               id="urlInput"
-              type="text"
               placeholder="https://www.youtube.com/watch?v=..."
               autocomplete="off"
               spellcheck="false"
+              rows="3"
               aria-describedby="urlError"
-            />
+            ></textarea>
             <small id="urlError" class="field-error"></small>
           </label>
+
+          <section id="previewPanel" class="preview" hidden>
+            <img id="previewThumb" alt="" />
+            <div>
+              <p class="eyebrow">Preview</p>
+              <strong id="previewTitle"></strong>
+              <span id="previewMeta"></span>
+              <small id="previewQualities"></small>
+            </div>
+          </section>
 
           <div class="controls">
             <fieldset>
@@ -85,9 +95,49 @@
             </label>
           </div>
 
-          <button id="downloadButton" class="primary" type="submit">
-            <span>Start download</span>
-          </button>
+          <details class="advanced">
+            <summary>Advanced options</summary>
+            <div class="advanced-grid">
+              <label class="field compact">
+                <span>MP3 bitrate</span>
+                <select id="bitrateSelect">
+                  <option value="320">320 kbps</option>
+                  <option value="256">256 kbps</option>
+                  <option value="192">192 kbps</option>
+                  <option value="128">128 kbps</option>
+                </select>
+              </label>
+              <label class="check">
+                <input id="metadataCheck" type="checkbox" checked />
+                <span>Embed metadata</span>
+              </label>
+              <label class="check">
+                <input id="thumbnailCheck" type="checkbox" />
+                <span>Save thumbnail</span>
+              </label>
+              <label class="check">
+                <input id="embedThumbnailCheck" type="checkbox" />
+                <span>Embed thumbnail</span>
+              </label>
+              <label class="check">
+                <input id="subtitlesCheck" type="checkbox" />
+                <span>Save English subtitles</span>
+              </label>
+              <label class="check">
+                <input id="autoUpdateAppCheck" type="checkbox" />
+                <span>Auto-update app on startup</span>
+              </label>
+            </div>
+          </details>
+
+          <div class="action-row">
+            <button id="previewButton" class="secondary" type="button">
+              Preview
+            </button>
+            <button id="downloadButton" class="primary" type="submit">
+              <span>Start queue</span>
+            </button>
+          </div>
         </form>
 
         <section class="status" aria-live="polite">
@@ -106,6 +156,21 @@
             <span id="etaText"></span>
           </div>
           <p id="fileText" class="file"></p>
+          <details id="errorDetails" class="error-details" hidden>
+            <summary>Technical details</summary>
+            <pre id="errorText"></pre>
+          </details>
+          <div class="status-actions">
+            <button id="cancelButton" class="secondary danger" type="button" disabled>
+              Cancel
+            </button>
+            <button id="openCurrentButton" class="secondary" type="button" disabled>
+              Open file
+            </button>
+            <button id="openFolderButton" class="secondary" type="button">
+              Open folder
+            </button>
+          </div>
         </section>
       </section>
 
@@ -118,6 +183,29 @@
         <div class="notice" id="ffmpegNotice" hidden>
           FFmpeg is not on PATH. MP3 conversion and best MP4 merging may fail.
         </div>
+        <div class="version-row">
+          <p id="versionText" class="version"></p>
+          <button id="updateAppButton" class="clear-button" type="button">
+            Update app
+          </button>
+          <button id="updateYtdlpButton" class="clear-button" type="button">
+            Update yt-dlp
+          </button>
+        </div>
+        <p id="appUpdateText" class="version"></p>
+        <section class="queue">
+          <div class="history-header">
+            <div>
+              <p class="eyebrow">Queue</p>
+              <h2>Next</h2>
+            </div>
+            <button id="clearQueueButton" class="clear-button" type="button">
+              Clear
+            </button>
+          </div>
+          <p id="queueEmpty" class="history-empty">Queue is empty.</p>
+          <div id="queueList" class="queue-list"></div>
+        </section>
         <section class="history">
           <div class="history-header">
             <div>
