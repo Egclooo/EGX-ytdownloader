@@ -1,2 +1,7 @@
 /dist
+/build
 .venv
+__pycache__/
+config.json
+history.json
+.update-result

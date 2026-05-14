@@ -573,6 +573,10 @@ openCurrentButton.addEventListener("click", () => {
   }
 });
 
+updateAppButton.addEventListener("click", () => {
+  runAppUpdate(false);
+});
+
 updateYtdlpButton.addEventListener("click", async () => {
   updateYtdlpButton.disabled = true;
   versionText.textContent = "Updating yt-dlp...";
@@ -623,5 +627,8 @@ window.addEventListener("pywebviewready", async () => {
   renderQueue();
   await loadHistory();
   await refreshConfig();
+  if (autoUpdateAppCheck.checked) {
+    await runAppUpdate(true);
+  }
   await refreshStatus();
 });
