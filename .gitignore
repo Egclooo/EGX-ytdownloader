@@ -5,3 +5,4 @@ __pycache__/
 config.json
 history.json
 .update-result
+.installer-cache/

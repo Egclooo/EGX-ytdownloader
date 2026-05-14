@@ -6,11 +6,50 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $UpdateResult = Join-Path $RepoRoot ".update-result"
+$InstallerCache = Join-Path $RepoRoot ".installer-cache"
+$PythonInstallerUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
+$GitInstallerUrl = "https://github.com/git-for-windows/git/releases/latest/download/Git-64-bit.exe"
 
 function Write-Step {
   param([string]$Message)
   Write-Host ""
   Write-Host "==> $Message" -ForegroundColor Cyan
+}
+
+function Refresh-Path {
+  $machinePath = [Environment]::GetEnvironmentVariable("Path", "Machine")
+  $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+  $env:Path = "$machinePath;$userPath"
+}
+
+function Download-Installer {
+  param(
+    [string]$Url,
+    [string]$FileName
+  )
+
+  if (-not (Test-Path -LiteralPath $InstallerCache)) {
+    New-Item -ItemType Directory -Path $InstallerCache | Out-Null
+  }
+
+  $target = Join-Path $InstallerCache $FileName
+  Write-Host "Downloading $Url"
+  [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  Invoke-WebRequest -Uri $Url -OutFile $target -UseBasicParsing
+  return $target
+}
+
+function Run-Installer {
+  param(
+    [string]$Path,
+    [string[]]$Arguments
+  )
+
+  $process = Start-Process -FilePath $Path -ArgumentList $Arguments -Wait -PassThru
+  if ($process.ExitCode -ne 0) {
+    throw "Installer failed with exit code $($process.ExitCode): $Path"
+  }
+  Refresh-Path
 }
 
 function Find-Python {
@@ -52,16 +91,26 @@ function Find-Python {
 }
 
 function Install-Python {
-  Write-Step "Python was not found. Installing Python 3.12 with winget"
+  Write-Step "Python was not found. Installing Python 3.12"
   $winget = Get-Command winget -ErrorAction SilentlyContinue
-  if (-not $winget) {
-    throw "Python is not installed and winget is not available. Install Python 3.12 from https://www.python.org/downloads/windows/ and run start.bat again."
+
+  if ($winget) {
+    winget install --id Python.Python.3.12 --source winget --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -eq 0) {
+      Refresh-Path
+      return
+    }
+    Write-Warning "winget Python install failed. Falling back to direct download."
   }
 
-  winget install --id Python.Python.3.12 --source winget --accept-package-agreements --accept-source-agreements
-  if ($LASTEXITCODE -ne 0) {
-    throw "Python installation failed. Run start.bat again after installing Python manually."
-  }
+  $installer = Download-Installer -Url $PythonInstallerUrl -FileName "python-3.12.4-amd64.exe"
+  Run-Installer -Path $installer -Arguments @(
+    "/quiet",
+    "InstallAllUsers=0",
+    "PrependPath=1",
+    "Include_launcher=1",
+    "Include_pip=1"
+  )
 }
 
 function Ensure-Python {
@@ -84,16 +133,25 @@ function Ensure-Git {
 
   Write-Step "Git was not found. Installing Git with winget"
   $winget = Get-Command winget -ErrorAction SilentlyContinue
-  if (-not $winget) {
-    Write-Warning "Git is not installed and winget is not available. GitHub updates will be skipped."
-    return $false
+
+  if ($winget) {
+    winget install --id Git.Git --source winget --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -eq 0) {
+      Refresh-Path
+      return [bool](Get-Command git -ErrorAction SilentlyContinue)
+    }
+    Write-Warning "winget Git install failed. Falling back to direct download."
+  } else {
+    Write-Warning "winget is not available. Falling back to direct Git download."
   }
 
-  winget install --id Git.Git --source winget --accept-package-agreements --accept-source-agreements
-  if ($LASTEXITCODE -ne 0) {
-    Write-Warning "Git installation failed. GitHub updates will be skipped."
-    return $false
-  }
+  $installer = Download-Installer -Url $GitInstallerUrl -FileName "Git-64-bit.exe"
+  Run-Installer -Path $installer -Arguments @(
+    "/VERYSILENT",
+    "/NORESTART",
+    "/NOCANCEL",
+    "/SP-"
+  )
 
   return [bool](Get-Command git -ErrorAction SilentlyContinue)
 }

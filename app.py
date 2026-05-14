@@ -767,7 +767,7 @@ def main() -> None:
         url=html_path.as_uri(),
         js_api=api,
         width=980,
-        height=680,
+        height=780,
         min_size=(760, 540),
     )
     api.set_window(window)
