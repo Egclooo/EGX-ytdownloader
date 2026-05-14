@@ -1,5 +1,6 @@
 /dist
 /build
+/downloads
 .venv
 __pycache__/
 config.json
