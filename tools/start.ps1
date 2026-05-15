@@ -243,7 +243,7 @@ function Run-UpdaterWindow {
     "--result-file", "`"$UpdateResult`""
   )
 
-  $process = Start-Process $VenvPython -ArgumentList $arguments -Wait -PassThru
+  $process = Start-Process $VenvPython -ArgumentList $arguments -WindowStyle Hidden -Wait -PassThru
   if ($process.ExitCode -ne 0) {
     Write-Warning "The update window ended with exit code $($process.ExitCode). Continuing startup."
   }

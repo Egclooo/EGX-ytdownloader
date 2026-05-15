@@ -162,9 +162,9 @@ def main() -> None:
         "YT Downloader Updater",
         url=(UI_DIR / "index.html").as_uri(),
         js_api=api,
-        width=560,
-        height=390,
-        min_size=(500, 340),
+        width=720,
+        height=480,
+        min_size=(620, 420),
     )
     api.set_window(window)
     webview.start(debug=False)
