@@ -18,11 +18,17 @@ function Write-Step {
 function Invoke-Git {
   param([string[]]$Arguments)
 
-  $output = & git -C $RepoRoot @Arguments 2>&1
-  $code = $LASTEXITCODE
-  [pscustomobject]@{
-    ExitCode = $code
-    Output = ($output -join [Environment]::NewLine)
+  $previousErrorActionPreference = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = & git -C $RepoRoot @Arguments 2>&1
+    $code = $LASTEXITCODE
+    [pscustomobject]@{
+      ExitCode = $code
+      Output = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    }
+  } finally {
+    $ErrorActionPreference = $previousErrorActionPreference
   }
 }
 
@@ -44,18 +50,33 @@ try {
   }
 
   Write-Step "Fetching GitHub updates"
-  $fetch = Invoke-Git @("fetch", "--prune", "origin")
+  $fetch = Invoke-Git @("fetch", "--quiet", "--prune", "origin")
   if ($fetch.ExitCode -ne 0) {
-    throw $fetch.Output
+    throw "Git fetch failed with exit code $($fetch.ExitCode).$([Environment]::NewLine)$($fetch.Output)"
   }
 
-  $branch = (Invoke-Git @("branch", "--show-current")).Output.Trim()
+  $branchResult = Invoke-Git @("branch", "--show-current")
+  if ($branchResult.ExitCode -ne 0) {
+    throw "Could not detect the current Git branch.$([Environment]::NewLine)$($branchResult.Output)"
+  }
+
+  $branch = $branchResult.Output.Trim()
   if (-not $branch) {
     throw "Could not detect the current Git branch."
   }
 
-  $local = (Invoke-Git @("rev-parse", "HEAD")).Output.Trim()
-  $remote = (Invoke-Git @("rev-parse", "origin/$branch")).Output.Trim()
+  $localResult = Invoke-Git @("rev-parse", "HEAD")
+  if ($localResult.ExitCode -ne 0) {
+    throw "Could not read the local commit.$([Environment]::NewLine)$($localResult.Output)"
+  }
+
+  $remoteResult = Invoke-Git @("rev-parse", "origin/$branch")
+  if ($remoteResult.ExitCode -ne 0) {
+    throw "Could not read origin/$branch.$([Environment]::NewLine)$($remoteResult.Output)"
+  }
+
+  $local = $localResult.Output.Trim()
+  $remote = $remoteResult.Output.Trim()
 
   if ($local -eq $remote) {
     Write-Host "Already up to date." -ForegroundColor Green
@@ -66,7 +87,7 @@ try {
   Write-Step "Pulling latest files"
   $pull = Invoke-Git @("pull", "--ff-only", "origin", $branch)
   if ($pull.ExitCode -ne 0) {
-    throw $pull.Output
+    throw "Git pull failed with exit code $($pull.ExitCode).$([Environment]::NewLine)$($pull.Output)"
   }
 
   Write-Host $pull.Output
