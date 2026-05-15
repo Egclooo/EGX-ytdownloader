@@ -236,16 +236,14 @@ function Run-UpdaterWindow {
   }
 
   Write-Step "Opening update window"
-  $script = Join-Path $PSScriptRoot "update.ps1"
+  $script = Join-Path $PSScriptRoot "updater_app.py"
   $arguments = @(
-    "-NoProfile",
-    "-ExecutionPolicy", "Bypass",
-    "-File", "`"$script`"",
-    "-RepoRoot", "`"$RepoRoot`"",
-    "-ResultFile", "`"$UpdateResult`""
+    "`"$script`"",
+    "--repo-root", "`"$RepoRoot`"",
+    "--result-file", "`"$UpdateResult`""
   )
 
-  $process = Start-Process powershell.exe -ArgumentList $arguments -Wait -PassThru
+  $process = Start-Process $VenvPython -ArgumentList $arguments -Wait -PassThru
   if ($process.ExitCode -ne 0) {
     Write-Warning "The update window ended with exit code $($process.ExitCode). Continuing startup."
   }

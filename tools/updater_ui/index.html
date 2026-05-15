@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>YT Downloader Updater</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="updater">
+      <header>
+        <p class="eyebrow">GitHub updater</p>
+        <h1>YT Downloader</h1>
+      </header>
+
+      <section class="status" id="statusPanel">
+        <div class="status-line">
+          <span class="status-dot" aria-hidden="true"></span>
+          <strong id="statusText">Preparing update check...</strong>
+          <span id="percentText">0%</span>
+        </div>
+        <div class="progress" aria-hidden="true">
+          <div id="progressBar"></div>
+        </div>
+        <p id="detailText" class="detail"></p>
+      </section>
+
+      <footer>
+        <button id="closeButton" type="button" disabled>Close</button>
+      </footer>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>

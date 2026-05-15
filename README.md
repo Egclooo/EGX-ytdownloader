@@ -32,8 +32,8 @@ start.bat
 ```
 
 The launcher checks for Python, installs Python 3.12 if needed, creates `.venv`,
-installs pip/dependencies, checks GitHub updates in a separate updater window,
-restarts the launcher after a successful update, then starts the app.
+installs pip/dependencies, checks GitHub updates in a separate pywebview updater
+window, restarts the launcher after a successful update, then starts the app.
 
 GitHub updates require the folder to be a Git checkout and require Git on PATH.
 If Python or Git is missing, the launcher tries `winget` first. If `winget` is
