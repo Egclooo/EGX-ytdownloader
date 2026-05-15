@@ -7,6 +7,7 @@ $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $VenvPython = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 $UpdateResult = Join-Path $RepoRoot ".update-result"
 $InstallerCache = Join-Path $RepoRoot ".installer-cache"
+$BootstrapLog = Join-Path $RepoRoot ".bootstrap.log"
 $RequiredPythonMajor = 3
 $RequiredPythonMinor = 12
 $PythonInstallerUrl = "https://www.python.org/ftp/python/3.12.4/python-3.12.4-amd64.exe"
@@ -15,7 +16,47 @@ $GitInstallerUrl = "https://github.com/git-for-windows/git/releases/latest/downl
 function Write-Step {
   param([string]$Message)
   Write-Host ""
-  Write-Host "==> $Message" -ForegroundColor Cyan
+  Write-Host "==> $Message"
+}
+
+function Set-BootstrapProgress {
+  param(
+    [string]$Message,
+    [int]$Percent
+  )
+
+  Write-Progress -Activity "YT Downloader startup" -Status $Message -PercentComplete $Percent
+}
+
+function Add-BootstrapLog {
+  param([string]$Message)
+  Add-Content -LiteralPath $BootstrapLog -Value $Message -Encoding UTF8
+}
+
+function Invoke-QuietCommand {
+  param(
+    [string]$Label,
+    [int]$Percent,
+    [string]$FilePath,
+    [string[]]$Arguments
+  )
+
+  Write-Step $Label
+  Set-BootstrapProgress -Message $Label -Percent $Percent
+  Add-BootstrapLog ""
+  Add-BootstrapLog "==> $Label"
+  Add-BootstrapLog "$FilePath $($Arguments -join ' ')"
+
+  $output = & $FilePath @Arguments 2>&1
+  $code = $LASTEXITCODE
+  if ($output) {
+    Add-BootstrapLog (($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
+  }
+  Add-BootstrapLog "Exit code: $code"
+
+  if ($code -ne 0) {
+    throw "$Label failed. See $BootstrapLog for details."
+  }
 }
 
 function Refresh-Path {
@@ -35,9 +76,13 @@ function Download-Installer {
   }
 
   $target = Join-Path $InstallerCache $FileName
-  Write-Host "Downloading $Url"
+  Write-Step "Downloading installer"
+  Set-BootstrapProgress -Message "Downloading installer" -Percent 16
   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+  $previousProgressPreference = $ProgressPreference
+  $ProgressPreference = "SilentlyContinue"
   Invoke-WebRequest -Uri $Url -OutFile $target -UseBasicParsing
+  $ProgressPreference = $previousProgressPreference
   return $target
 }
 
@@ -113,12 +158,17 @@ function Install-Python {
   $winget = Get-Command winget -ErrorAction SilentlyContinue
 
   if ($winget) {
-    winget install --id Python.Python.3.12 --source winget --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -eq 0) {
+    try {
+      Invoke-QuietCommand `
+        -Label "Installing Python 3.12 with winget" `
+        -Percent 12 `
+        -FilePath "winget" `
+        -Arguments @("install", "--id", "Python.Python.3.12", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements")
       Refresh-Path
       return
+    } catch {
+      Write-Warning "winget Python install failed. Falling back to direct download."
     }
-    Write-Warning "winget Python install failed. Falling back to direct download."
   }
 
   $installer = Download-Installer -Url $PythonInstallerUrl -FileName "python-3.12.4-amd64.exe"
@@ -153,12 +203,17 @@ function Ensure-Git {
   $winget = Get-Command winget -ErrorAction SilentlyContinue
 
   if ($winget) {
-    winget install --id Git.Git --source winget --accept-package-agreements --accept-source-agreements
-    if ($LASTEXITCODE -eq 0) {
+    try {
+      Invoke-QuietCommand `
+        -Label "Installing Git with winget" `
+        -Percent 54 `
+        -FilePath "winget" `
+        -Arguments @("install", "--id", "Git.Git", "--source", "winget", "--accept-package-agreements", "--accept-source-agreements")
       Refresh-Path
       return [bool](Get-Command git -ErrorAction SilentlyContinue)
+    } catch {
+      Write-Warning "winget Git install failed. Falling back to direct download."
     }
-    Write-Warning "winget Git install failed. Falling back to direct download."
   } else {
     Write-Warning "winget is not available. Falling back to direct Git download."
   }
@@ -194,30 +249,32 @@ function Ensure-Venv {
   }
 
   if (-not (Test-Path -LiteralPath $VenvPython)) {
-    Write-Step "Creating virtual environment"
-    & $PythonExe -m venv $venvDir
-    if ($LASTEXITCODE -ne 0) {
-      throw "Could not create the virtual environment."
-    }
+    Invoke-QuietCommand `
+      -Label "Creating virtual environment" `
+      -Percent 28 `
+      -FilePath $PythonExe `
+      -Arguments @("-m", "venv", $venvDir)
   }
 }
 
 function Install-Dependencies {
-  Write-Step "Installing Python dependencies"
-  & $VenvPython -m ensurepip --upgrade
-  if ($LASTEXITCODE -ne 0) {
-    throw "Could not install or update pip."
-  }
+  Invoke-QuietCommand `
+    -Label "Preparing pip" `
+    -Percent 38 `
+    -FilePath $VenvPython `
+    -Arguments @("-m", "ensurepip", "--upgrade")
 
-  & $VenvPython -m pip install --upgrade pip
-  if ($LASTEXITCODE -ne 0) {
-    throw "Could not update pip."
-  }
+  Invoke-QuietCommand `
+    -Label "Updating pip" `
+    -Percent 46 `
+    -FilePath $VenvPython `
+    -Arguments @("-m", "pip", "install", "--disable-pip-version-check", "--upgrade", "pip")
 
-  & $VenvPython -m pip install -r (Join-Path $RepoRoot "requirements.txt")
-  if ($LASTEXITCODE -ne 0) {
-    throw "Could not install project dependencies."
-  }
+  Invoke-QuietCommand `
+    -Label "Installing Python dependencies" `
+    -Percent 62 `
+    -FilePath $VenvPython `
+    -Arguments @("-m", "pip", "install", "--disable-pip-version-check", "-r", (Join-Path $RepoRoot "requirements.txt"))
 }
 
 function Run-UpdaterWindow {
@@ -258,19 +315,26 @@ function Run-UpdaterWindow {
 }
 
 try {
+  Set-Content -LiteralPath $BootstrapLog -Value "YT Downloader bootstrap log" -Encoding UTF8
   Write-Step "Bootstrapping YT Downloader"
+  Set-BootstrapProgress -Message "Bootstrapping YT Downloader" -Percent 4
   $python = Ensure-Python
   Ensure-Venv -PythonExe $python
   Install-Dependencies
+  Set-BootstrapProgress -Message "Checking for updates" -Percent 78
   Run-UpdaterWindow
 
   Write-Step "Starting app"
+  Set-BootstrapProgress -Message "Starting app" -Percent 96
+  Write-Progress -Activity "YT Downloader startup" -Completed
   & $VenvPython (Join-Path $RepoRoot "app.py")
   exit $LASTEXITCODE
 } catch {
+  Write-Progress -Activity "YT Downloader startup" -Completed
   Write-Host ""
   Write-Host "Startup failed:" -ForegroundColor Red
   Write-Host $_.Exception.Message
+  Write-Host "Details were saved to $BootstrapLog"
   Write-Host ""
   Read-Host "Press Enter to close"
   exit 1
