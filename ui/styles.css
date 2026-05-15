@@ -14,8 +14,6 @@
   --accent: #ff3b30;
   --accent-hover: #e92f25;
   --accent-soft: rgba(255, 59, 48, 0.14);
-  --teal: #35c2b0;
-  --teal-soft: rgba(53, 194, 176, 0.14);
   --success: #41d16f;
   --danger: #ff5d5d;
   --warning: #f2c94c;
@@ -39,7 +37,7 @@ body {
   overflow: hidden;
   background:
     linear-gradient(90deg, rgba(255, 59, 48, 0.08), transparent 28%),
-    linear-gradient(180deg, rgba(53, 194, 176, 0.06), transparent 34%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
     linear-gradient(135deg, #0d0e10 0%, #111318 48%, #0d0f13 100%);
   color: var(--text);
   font-family:
@@ -125,7 +123,7 @@ h2 {
 
 .eyebrow {
   margin-bottom: 6px;
-  color: var(--teal);
+  color: #ff8f87;
   font-size: 0.72rem;
   font-weight: 850;
   letter-spacing: 0.08em;

@@ -36,19 +36,6 @@ try {
   Write-Host "YT Downloader update check" -ForegroundColor Green
   Write-Host "Repository: $RepoRoot"
 
-  Write-Step "Checking local changes"
-  $status = Invoke-Git @("status", "--porcelain")
-  if ($status.ExitCode -ne 0) {
-    throw $status.Output
-  }
-  if ($status.Output.Trim()) {
-    Write-Host "Local changes were found. Update skipped to avoid overwriting work." -ForegroundColor Yellow
-    Write-Host ""
-    Write-Host $status.Output
-    Start-Sleep -Seconds 3
-    exit 0
-  }
-
   Write-Step "Fetching GitHub updates"
   $fetch = Invoke-Git @("fetch", "--quiet", "--prune", "origin")
   if ($fetch.ExitCode -ne 0) {
@@ -85,7 +72,7 @@ try {
   }
 
   Write-Step "Pulling latest files"
-  $pull = Invoke-Git @("pull", "--ff-only", "origin", $branch)
+  $pull = Invoke-Git @("pull", "--ff-only", "--autostash", "origin", $branch)
   if ($pull.ExitCode -ne 0) {
     throw "Git pull failed with exit code $($pull.ExitCode).$([Environment]::NewLine)$($pull.Output)"
   }
