@@ -106,47 +106,166 @@ function Test-PythonVersion {
     return $false
   }
 
+  $resolvedPython = $null
   try {
-    $version = & $PythonExe -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+    $resolvedPython = (Resolve-Path -LiteralPath $PythonExe).Path
+  } catch {
+    return $false
+  }
+
+  $lowerPath = $resolvedPython.ToLowerInvariant()
+  $excludedFragments = @(
+    "\qgis ",
+    "\qgis\",
+    "\fl studio ",
+    "\fl studio\",
+    "\windowsapps\"
+  )
+
+  foreach ($fragment in $excludedFragments) {
+    if ($lowerPath.Contains($fragment)) {
+      Add-BootstrapLog "Skipping bundled or project-local Python candidate: $resolvedPython"
+      return $false
+    }
+  }
+
+  $probe = "import sys, venv, ensurepip; sys.stdout.write('%d.%d|%s' % (sys.version_info[0], sys.version_info[1], sys.executable))"
+
+  try {
+    $output = & $resolvedPython -I -E -c $probe 2>&1
+    $code = $LASTEXITCODE
+    if ($code -ne 0) {
+      Add-BootstrapLog "Rejected Python candidate: $resolvedPython"
+      if ($output) {
+        Add-BootstrapLog (($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
+      }
+      return $false
+    }
+
+    $result = (($output | Select-Object -Last 1).ToString()).Trim()
+    $version = ($result -split "\|", 2)[0]
     return $version -eq "$RequiredPythonMajor.$RequiredPythonMinor"
   } catch {
+    Add-BootstrapLog "Rejected Python candidate: $resolvedPython"
+    Add-BootstrapLog $_.Exception.Message
     return $false
   }
 }
 
-function Find-Python {
-  $commands = @(
-    { py -3.12 -c "import sys; print(sys.executable)" 2>$null },
-    { python -c "import sys; print(sys.executable if sys.version_info[:2] == (3, 12) else '')" 2>$null }
+function Add-PythonCandidate {
+  param(
+    [System.Collections.Generic.List[string]]$Candidates,
+    [string]$Path
   )
 
-  foreach ($command in $commands) {
+  if (-not $Path) {
+    return
+  }
+
+  $trimmed = $Path.Trim().Trim('"')
+  if (-not $trimmed -or $Candidates.Contains($trimmed)) {
+    return
+  }
+
+  $Candidates.Add($trimmed) | Out-Null
+}
+
+function Get-PythonFromPyLauncher {
+  try {
+    $versionArg = "-$RequiredPythonMajor.$RequiredPythonMinor"
+    $output = & py $versionArg -I -E -c "import sys; sys.stdout.write(sys.executable)" 2>&1
+    if ($LASTEXITCODE -eq 0 -and $output) {
+      return (($output | Select-Object -Last 1).ToString()).Trim()
+    }
+
+    if ($output) {
+      Add-BootstrapLog "Python launcher did not return a usable $RequiredPythonMajor.$RequiredPythonMinor executable:"
+      Add-BootstrapLog (($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine)
+    }
+  } catch {
+    Add-BootstrapLog "Python launcher check failed: $($_.Exception.Message)"
+  }
+
+  return $null
+}
+
+function Find-Python {
+  $candidates = New-Object System.Collections.Generic.List[string]
+
+  $registryKeys = @(
+    "HKCU:\Software\Python\PythonCore\$RequiredPythonMajor.$RequiredPythonMinor\InstallPath",
+    "HKLM:\Software\Python\PythonCore\$RequiredPythonMajor.$RequiredPythonMinor\InstallPath",
+    "HKLM:\Software\WOW6432Node\Python\PythonCore\$RequiredPythonMajor.$RequiredPythonMinor\InstallPath"
+  )
+
+  foreach ($keyPath in $registryKeys) {
     try {
-      $candidate = (& $command | Select-Object -First 1)
-      if ($candidate -and (Test-PythonVersion -PythonExe $candidate)) {
-        return $candidate
+      $key = Get-Item -LiteralPath $keyPath -ErrorAction SilentlyContinue
+      if (-not $key) {
+        continue
+      }
+
+      $installPath = $key.GetValue("")
+      if ($installPath) {
+        Add-PythonCandidate -Candidates $candidates -Path (Join-Path $installPath "python.exe")
       }
     } catch {
       continue
     }
   }
 
+  $knownPaths = @(
+    "$env:LocalAppData\Programs\Python\Python312\python.exe",
+    "$env:ProgramFiles\Python312\python.exe",
+    "${env:ProgramFiles(x86)}\Python312\python.exe"
+  )
+
+  foreach ($path in $knownPaths) {
+    Add-PythonCandidate -Candidates $candidates -Path $path
+  }
+
   $knownRoots = @(
     "$env:LocalAppData\Programs\Python",
-    "$env:ProgramFiles\Python*",
-    "${env:ProgramFiles(x86)}\Python*"
+    "$env:ProgramFiles",
+    "${env:ProgramFiles(x86)}"
   )
 
   foreach ($root in $knownRoots) {
-    if (-not $root) {
+    if (-not $root -or -not (Test-Path -LiteralPath $root)) {
       continue
     }
-    $candidates = Get-ChildItem -Path $root -Filter python.exe -Recurse -ErrorAction SilentlyContinue |
-      Sort-Object FullName -Descending
-    foreach ($candidate in $candidates) {
-      if (Test-PythonVersion -PythonExe $candidate.FullName) {
-        return $candidate.FullName
+
+    Get-ChildItem -Path (Join-Path $root "Python*") -Filter python.exe -ErrorAction SilentlyContinue |
+      Sort-Object FullName -Descending |
+      ForEach-Object {
+        Add-PythonCandidate -Candidates $candidates -Path $_.FullName
       }
+  }
+
+  Add-PythonCandidate -Candidates $candidates -Path (Get-PythonFromPyLauncher)
+
+  $pathCommands = @("python3.12.exe", "python.exe")
+  foreach ($commandName in $pathCommands) {
+    $command = Get-Command $commandName -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($command) {
+      Add-PythonCandidate -Candidates $candidates -Path $command.Source
+    }
+  }
+
+  foreach ($candidate in $candidates) {
+    try {
+      $resolvedCandidate = (Resolve-Path -LiteralPath $candidate).Path
+      $venvDir = (Join-Path $RepoRoot ".venv").ToLowerInvariant()
+      if ($resolvedCandidate.ToLowerInvariant().StartsWith($venvDir)) {
+        Add-BootstrapLog "Skipping project virtual environment as a base Python candidate: $resolvedCandidate"
+        continue
+      }
+    } catch {
+      continue
+    }
+
+    if (Test-PythonVersion -PythonExe $candidate) {
+      return (Resolve-Path -LiteralPath $candidate).Path
     }
   }
 
