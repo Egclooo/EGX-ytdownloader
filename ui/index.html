@@ -3,16 +3,16 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>YT Downloader</title>
+    <title>EGX Downloader</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
+  <body data-platform="youtube">
     <main class="app">
       <section class="panel">
         <div class="topbar">
           <div>
             <p class="eyebrow">Local downloader</p>
-            <h1>YT Downloader</h1>
+            <h1 id="appTitle">YT Downloader</h1>
           </div>
           <button id="folderButton" class="folder-button" type="button">
             <span class="folder-icon" aria-hidden="true"></span>
@@ -21,8 +21,22 @@
         </div>
 
         <form id="downloadForm" class="form" novalidate>
+          <fieldset>
+            <legend>Source</legend>
+            <div class="segmented platform-switch" role="group" aria-label="Source">
+              <label>
+                <input type="radio" name="platform" value="youtube" checked />
+                <span>YouTube</span>
+              </label>
+              <label>
+                <input type="radio" name="platform" value="tiktok" />
+                <span>TikTok</span>
+              </label>
+            </div>
+          </fieldset>
+
           <label class="field url-field" id="urlField">
-            <span>YouTube URL</span>
+            <span id="urlLabel">YouTube URL</span>
             <textarea
               id="urlInput"
               placeholder="https://www.youtube.com/watch?v=..."

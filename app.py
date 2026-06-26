@@ -24,6 +24,7 @@ HISTORY_FILE = APP_DIR / "history.json"
 CONFIG_FILE = APP_DIR / "config.json"
 HISTORY_LIMIT = 20
 DEFAULT_CONFIG: dict[str, Any] = {
+    "platform": "youtube",
     "downloadFolder": str(DOWNLOAD_DIR),
     "format": "mp4",
     "quality": "1080",
@@ -60,10 +61,20 @@ URL_ERROR_MARKERS = (
     "failed to resolve",
     "temporary failure in name resolution",
 )
-YOUTUBE_URL_RE = re.compile(
-    r"^(https?://)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)/.+",
-    re.IGNORECASE,
-)
+PLATFORM_URL_RE = {
+    "youtube": re.compile(
+        r"^(https?://)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)/.+",
+        re.IGNORECASE,
+    ),
+    "tiktok": re.compile(
+        r"^(https?://)?((www|m|vm|vt)\.)?tiktok\.com/.+",
+        re.IGNORECASE,
+    ),
+}
+PLATFORM_LABELS = {
+    "youtube": "YouTube",
+    "tiktok": "TikTok",
+}
 
 
 class DownloadCancelled(Exception):
@@ -180,12 +191,13 @@ class DownloaderApi:
         self._write_config()
         return {"ok": True, "settings": dict(self._config)}
 
-    def fetch_info(self, url: str) -> dict[str, Any]:
+    def fetch_info(self, url: str, platform: str = "youtube") -> dict[str, Any]:
         url = (url or "").strip()
-        if not YOUTUBE_URL_RE.match(url):
+        platform = self._clean_platform(platform)
+        if not self._is_platform_url(url, platform):
             return {
                 "ok": False,
-                "error": "Enter a valid YouTube URL.",
+                "error": f"Enter a valid {self._platform_label(platform)} URL.",
                 "errorField": "url",
             }
 
@@ -254,16 +266,18 @@ class DownloaderApi:
         media_type: str,
         quality: str,
         options: dict[str, Any] | None = None,
+        platform: str = "youtube",
     ) -> dict[str, Any]:
         url = (url or "").strip()
+        platform = self._clean_platform(platform)
         media_type = (media_type or "mp4").lower()
         quality = (quality or "1080").lower()
         options = options or {}
 
-        if not YOUTUBE_URL_RE.match(url):
+        if not self._is_platform_url(url, platform):
             return {
                 "ok": False,
-                "error": "Enter a valid YouTube URL.",
+                "error": f"Enter a valid {self._platform_label(platform)} URL.",
                 "errorField": "url",
             }
 
@@ -279,7 +293,7 @@ class DownloaderApi:
 
         thread = threading.Thread(
             target=self._download_worker,
-            args=(url, media_type, quality, options, cancel_event),
+            args=(url, media_type, quality, options, platform, cancel_event),
             daemon=True,
         )
         thread.start()
@@ -310,6 +324,7 @@ class DownloaderApi:
         media_type: str,
         quality: str,
         options: dict[str, Any],
+        platform: str,
         cancel_event: threading.Event,
     ) -> None:
         self._set_running("Preparing download...", percent=0)
@@ -324,7 +339,7 @@ class DownloaderApi:
         except DownloadCancelled:
             self._set_cancelled()
         except Exception as exc:
-            self._set_error(str(exc))
+            self._set_error(str(exc), platform)
         finally:
             with self._lock:
                 if self._cancel_event is cancel_event:
@@ -640,13 +655,13 @@ class DownloaderApi:
             rawError="",
         )
 
-    def _set_error(self, raw_error: str) -> None:
+    def _set_error(self, raw_error: str, platform: str = "youtube") -> None:
         is_url_error = self._is_url_error(raw_error)
         current_status = self.get_status()
         self._set_progress(
             state="error",
             message=(
-                "This YouTube link could not be reached."
+                f"This {self._platform_label(platform)} link could not be reached."
                 if is_url_error
                 else self._clean_error(raw_error)
             ),
@@ -669,6 +684,7 @@ class DownloaderApi:
             "file": str(item.get("file") or "Download finished")[:260],
             "format": str(item.get("format") or "")[:12],
             "quality": str(item.get("quality") or "")[:40],
+            "platform": DownloaderApi._clean_platform(item.get("platform"))[:20],
             "time": str(item.get("time") or "")[:40],
             "path": str(item.get("path") or "")[:520],
             "url": str(item.get("url") or "")[:520],
@@ -681,6 +697,7 @@ class DownloaderApi:
         mp3_bitrate = DownloaderApi._clean_mp3_bitrate(config.get("mp3Bitrate"))
 
         return {
+            "platform": DownloaderApi._clean_platform(config.get("platform")),
             "downloadFolder": str(config.get("downloadFolder") or DOWNLOAD_DIR),
             "format": media_type if media_type in {"mp3", "mp4"} else "mp4",
             "quality": quality if quality in {"720", "1080", "best"} else "1080",
@@ -696,6 +713,20 @@ class DownloaderApi:
     def _clean_mp3_bitrate(value: Any) -> str:
         bitrate = str(value or "320")
         return bitrate if bitrate in {"128", "192", "256", "320"} else "320"
+
+    @staticmethod
+    def _clean_platform(value: Any) -> str:
+        platform = str(value or "youtube").lower()
+        return platform if platform in PLATFORM_URL_RE else "youtube"
+
+    @staticmethod
+    def _platform_label(platform: str) -> str:
+        return PLATFORM_LABELS.get(platform, PLATFORM_LABELS["youtube"])
+
+    @staticmethod
+    def _is_platform_url(url: str, platform: str) -> bool:
+        pattern = PLATFORM_URL_RE.get(platform, PLATFORM_URL_RE["youtube"])
+        return bool(pattern.match(url or ""))
 
     @staticmethod
     def _clean_info(info: dict[str, Any] | None) -> dict[str, Any]:
@@ -763,7 +794,7 @@ def main() -> None:
     api = DownloaderApi()
     html_path = UI_DIR / "index.html"
     window = webview.create_window(
-        "YT Downloader",
+        "EGX Downloader",
         url=html_path.as_uri(),
         js_api=api,
         width=980,

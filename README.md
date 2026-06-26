@@ -1,6 +1,6 @@
-# YouTube Downloader Webview
+# EGX Downloader Webview
 
-A small local Python app with a native webview UI for downloading videos as MP4 or extracting audio as MP3.
+A small local Python app with a native webview UI for downloading YouTube or TikTok videos as MP4 or extracting audio as MP3.
 
 Use this only for videos you own, videos with a license that allows downloading, or content where you have permission.
 

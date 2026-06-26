@@ -2,7 +2,9 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => document.querySelectorAll(selector);
 
 const form = $("#downloadForm");
+const appTitle = $("#appTitle");
 const urlField = $("#urlField");
+const urlLabel = $("#urlLabel");
 const urlInput = $("#urlInput");
 const qualityField = $("#qualityField");
 const qualitySelect = $("#qualitySelect");
@@ -49,15 +51,37 @@ const fileText = $("#fileText");
 const errorDetails = $("#errorDetails");
 const errorText = $("#errorText");
 
+const platformConfig = {
+  youtube: {
+    title: "YT Downloader",
+    documentTitle: "YT Downloader",
+    urlLabel: "YouTube URL",
+    placeholder: "https://www.youtube.com/watch?v=...",
+    emptyError: "Paste at least one YouTube link.",
+    invalidError: "Invalid YouTube link",
+    unreachableError: "This YouTube link could not be reached.",
+    pattern: /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i,
+  },
+  tiktok: {
+    title: "TikTok Downloader",
+    documentTitle: "TikTok Downloader",
+    urlLabel: "TikTok URL",
+    placeholder: "https://www.tiktok.com/@creator/video/...",
+    emptyError: "Paste at least one TikTok link.",
+    invalidError: "Invalid TikTok link",
+    unreachableError: "This TikTok link could not be reached.",
+    pattern: /^(https?:\/\/)?((www|m|vm|vt)\.)?tiktok\.com\/.+/i,
+  },
+};
+
 let pollHandle = null;
 let activeDownload = null;
 let downloadHistory = [];
 let queueItems = [];
 let currentPath = "";
 let saveSettingsHandle = null;
+let platformAnimationHandle = null;
 
-const youtubeUrlPattern =
-  /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be|music\.youtube\.com)\/.+/i;
 const terminalStates = new Set(["done", "error", "cancelled"]);
 const idleStatus = {
   state: "idle",
@@ -76,6 +100,14 @@ function pyApi() {
 
 function selectedFormat() {
   return $("input[name='format']:checked").value;
+}
+
+function selectedPlatform() {
+  return $("input[name='platform']:checked")?.value || "youtube";
+}
+
+function currentPlatformConfig() {
+  return platformConfig[selectedPlatform()] || platformConfig.youtube;
 }
 
 function parseUrls() {
@@ -102,6 +134,7 @@ function selectedOptions() {
 
 function selectedSettings() {
   return {
+    platform: selectedPlatform(),
     format: selectedFormat(),
     quality: qualitySelect.value,
     ...selectedOptions(),
@@ -125,14 +158,16 @@ function setUrlError(message) {
 }
 
 function validateUrls(urls = parseUrls()) {
+  const config = currentPlatformConfig();
+
   if (!urls.length) {
-    setUrlError("Paste at least one YouTube link.");
+    setUrlError(config.emptyError);
     return false;
   }
 
-  const invalidUrl = urls.find((url) => !youtubeUrlPattern.test(url));
+  const invalidUrl = urls.find((url) => !config.pattern.test(url));
   if (invalidUrl) {
-    setUrlError(`Invalid YouTube link: ${invalidUrl}`);
+    setUrlError(`${config.invalidError}: ${invalidUrl}`);
     return false;
   }
 
@@ -147,7 +182,7 @@ function applyStatus(status) {
   const isRunning = state === "running" || state === "cancelling";
 
   if (isUrlError) {
-    setUrlError(status.message || "This YouTube link could not be reached.");
+    setUrlError(status.message || currentPlatformConfig().unreachableError);
   }
 
   currentPath = status.path || currentPath;
@@ -228,7 +263,7 @@ function createHistoryRow(item) {
   title.textContent = item.file || "Download finished";
 
   const details = document.createElement("span");
-  details.textContent = `${item.format} - ${item.quality} - ${item.time}`;
+  details.textContent = `${platformLabel(item.platform)} - ${item.format} - ${item.quality} - ${item.time}`;
 
   const actions = document.createElement("div");
   actions.className = "history-actions";
@@ -255,6 +290,7 @@ async function recordDownload(status, item) {
     file: status.file || "Download finished",
     format: item.format.toUpperCase(),
     quality: item.qualityLabel,
+    platform: item.platform || selectedPlatform(),
     time: new Date().toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
@@ -287,7 +323,7 @@ function createQueueRow(item) {
   title.textContent = item.file || item.url;
 
   const details = document.createElement("span");
-  details.textContent = `${queueStateLabel(item.state)} - ${item.format.toUpperCase()} - ${item.qualityLabel}`;
+  details.textContent = `${queueStateLabel(item.state)} - ${platformLabel(item.platform)} - ${item.format.toUpperCase()} - ${item.qualityLabel}`;
 
   row.append(title, details);
   return row;
@@ -303,11 +339,19 @@ function queueStateLabel(state) {
   }[state] || state;
 }
 
+function platformLabel(platform) {
+  return {
+    youtube: "YouTube",
+    tiktok: "TikTok",
+  }[platform] || "YouTube";
+}
+
 function addUrlsToQueue(urls) {
   const settings = selectedSettings();
   const created = urls.map((url) => ({
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
     url,
+    platform: settings.platform,
     format: settings.format,
     quality: settings.quality,
     qualityLabel: selectedQualityLabel(),
@@ -341,6 +385,7 @@ async function startNextQueuedDownload() {
     item.format,
     item.quality,
     item.options,
+    item.platform,
   );
 
   if (!result.ok) {
@@ -394,6 +439,7 @@ async function refreshConfig() {
 }
 
 function applySettings(settings) {
+  setPlatform(settings.platform || "youtube", { save: false, animate: false });
   const formatInput = $(`input[name='format'][value='${settings.format || "mp4"}']`);
   if (formatInput) formatInput.checked = true;
   setQuality(settings.quality || "1080");
@@ -404,6 +450,43 @@ function applySettings(settings) {
   metadataCheck.checked = settings.embedMetadata !== false;
   autoUpdateAppCheck.checked = Boolean(settings.autoUpdateApp);
   syncQualityVisibility();
+}
+
+function setPlatform(platform, { save = true, animate = true } = {}) {
+  const normalized = platformConfig[platform] ? platform : "youtube";
+  const previous = document.body.dataset.platform || "youtube";
+  const input = $(`input[name='platform'][value='${normalized}']`);
+  if (input) input.checked = true;
+
+  const config = platformConfig[normalized];
+  document.body.dataset.platform = normalized;
+  document.title = config.documentTitle;
+  appTitle.textContent = config.title;
+  urlLabel.textContent = config.urlLabel;
+  urlInput.placeholder = config.placeholder;
+
+  previewPanel.hidden = true;
+  setUrlError("");
+
+  if (animate && previous !== normalized) {
+    runPlatformChangeAnimation(normalized);
+  }
+
+  if (save) {
+    scheduleSettingsSave();
+  }
+}
+
+function runPlatformChangeAnimation(next) {
+  clearTimeout(platformAnimationHandle);
+  document.body.classList.remove("is-platform-changing");
+  document.body.dataset.transitionDirection = next === "tiktok" ? "forward" : "back";
+  void document.body.offsetWidth;
+  document.body.classList.add("is-platform-changing");
+  platformAnimationHandle = setTimeout(() => {
+    document.body.classList.remove("is-platform-changing");
+    document.body.removeAttribute("data-transition-direction");
+  }, 620);
 }
 
 function scheduleSettingsSave() {
@@ -489,7 +572,7 @@ async function previewFirstUrl() {
   previewQualities.textContent = "";
   previewThumb.removeAttribute("src");
 
-  const result = await pyApi().fetch_info(urls[0]);
+  const result = await pyApi().fetch_info(urls[0], selectedPlatform());
   previewButton.disabled = false;
 
   if (!result.ok) {
@@ -521,6 +604,12 @@ $$("input[name='format']").forEach((input) => {
   input.addEventListener("change", () => {
     syncQualityVisibility();
     scheduleSettingsSave();
+  });
+});
+
+$$("input[name='platform']").forEach((input) => {
+  input.addEventListener("change", () => {
+    setPlatform(input.value);
   });
 });
 

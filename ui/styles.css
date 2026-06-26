@@ -12,8 +12,13 @@
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.18);
   --accent: #ff3b30;
+  --accent-rgb: 255, 59, 48;
   --accent-hover: #e92f25;
   --accent-soft: rgba(255, 59, 48, 0.14);
+  --accent-bright: #ff4b40;
+  --accent-hover-bright: #ff5f55;
+  --accent-alt: #ff8f3f;
+  --eyebrow-color: #ff8f87;
   --success: #41d16f;
   --danger: #ff5d5d;
   --warning: #f2c94c;
@@ -31,17 +36,50 @@ html {
 }
 
 body {
+  position: relative;
   min-width: 720px;
   min-height: 520px;
   margin: 0;
   overflow: hidden;
   background:
-    linear-gradient(90deg, rgba(255, 59, 48, 0.08), transparent 28%),
+    linear-gradient(90deg, rgba(var(--accent-rgb), 0.08), transparent 28%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 34%),
     linear-gradient(135deg, #0d0e10 0%, #111318 48%, #0d0f13 100%);
   color: var(--text);
   font-family:
     Inter, Segoe UI, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(var(--accent-rgb), 0.2) 42%,
+    rgba(255, 255, 255, 0.08) 50%,
+    transparent 68%
+  );
+  opacity: 0;
+  transform: translateX(-115%);
+}
+
+body[data-platform="tiktok"] {
+  --accent: #8f5cff;
+  --accent-rgb: 143, 92, 255;
+  --accent-hover: #7848ed;
+  --accent-soft: rgba(143, 92, 255, 0.16);
+  --accent-bright: #a978ff;
+  --accent-hover-bright: #b489ff;
+  --accent-alt: #ff4fd8;
+  --eyebrow-color: #c7a8ff;
+  background:
+    linear-gradient(90deg, rgba(var(--accent-rgb), 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(255, 79, 216, 0.07), transparent 36%),
+    linear-gradient(135deg, #0f0d14 0%, #17121f 48%, #101019 100%);
 }
 
 button,
@@ -56,6 +94,8 @@ button {
 }
 
 .app {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 318px;
   gap: 20px;
@@ -71,6 +111,10 @@ button {
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 120px),
     rgba(24, 26, 31, 0.96);
   box-shadow: var(--shadow);
+  transition:
+    border-color 260ms var(--ease),
+    background 260ms var(--ease),
+    box-shadow 260ms var(--ease);
 }
 
 .panel {
@@ -123,7 +167,7 @@ h2 {
 
 .eyebrow {
   margin-bottom: 6px;
-  color: #ff8f87;
+  color: var(--eyebrow-color);
   font-size: 0.72rem;
   font-weight: 850;
   letter-spacing: 0.08em;
@@ -199,7 +243,7 @@ input:focus,
 textarea:focus,
 select:focus,
 .select-button:focus {
-  border-color: rgba(255, 59, 48, 0.72);
+  border-color: rgba(var(--accent-rgb), 0.72);
   box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
@@ -348,9 +392,14 @@ legend {
   font-weight: 860;
   place-items: center;
   transition:
-    background 160ms var(--ease),
+    background 260ms var(--ease),
+    box-shadow 260ms var(--ease),
     color 160ms var(--ease),
     transform 160ms var(--ease);
+}
+
+.platform-switch {
+  transform-origin: center;
 }
 
 .segmented label:hover span {
@@ -361,7 +410,37 @@ legend {
 .segmented input:checked + span {
   background: var(--accent);
   color: #fff;
-  box-shadow: 0 10px 22px rgba(255, 59, 48, 0.24);
+  box-shadow: 0 10px 22px rgba(var(--accent-rgb), 0.24);
+}
+
+body.is-platform-changing::before {
+  animation: platform-sweep 620ms var(--ease);
+}
+
+body.is-platform-changing[data-transition-direction="back"]::before {
+  animation-name: platform-sweep-back;
+}
+
+body.is-platform-changing .panel {
+  animation: platform-panel-swap 520ms var(--ease);
+}
+
+body.is-platform-changing .side {
+  animation: platform-panel-swap 560ms var(--ease);
+  animation-delay: 30ms;
+}
+
+body.is-platform-changing .platform-switch {
+  animation: platform-switch-pop 420ms var(--ease);
+}
+
+body.is-platform-changing .platform-switch input:checked + span {
+  animation: selected-pill-pop 360ms var(--ease);
+}
+
+body.is-platform-changing h1,
+body.is-platform-changing #urlLabel {
+  animation: platform-text-swap 420ms var(--ease);
 }
 
 .native-select {
@@ -463,12 +542,12 @@ legend {
   min-height: 54px;
   overflow: hidden;
   border: 0;
-  background: linear-gradient(180deg, #ff4b40, var(--accent));
+  background: linear-gradient(180deg, var(--accent-bright), var(--accent));
   color: #fff;
   font-weight: 910;
   letter-spacing: 0;
   place-items: center;
-  box-shadow: 0 14px 34px rgba(255, 59, 48, 0.26);
+  box-shadow: 0 14px 34px rgba(var(--accent-rgb), 0.26);
 }
 
 .primary::after {
@@ -489,9 +568,9 @@ legend {
 }
 
 .primary:hover {
-  background: linear-gradient(180deg, #ff5f55, var(--accent-hover));
+  background: linear-gradient(180deg, var(--accent-hover-bright), var(--accent-hover));
   transform: translateY(-1px);
-  box-shadow: 0 18px 42px rgba(255, 59, 48, 0.32);
+  box-shadow: 0 18px 42px rgba(var(--accent-rgb), 0.32);
 }
 
 .primary:hover::after {
@@ -639,7 +718,7 @@ legend {
 }
 
 .status[data-state="running"] {
-  border-color: rgba(255, 59, 48, 0.48);
+  border-color: rgba(var(--accent-rgb), 0.48);
 }
 
 .status[data-state="done"] {
@@ -707,8 +786,8 @@ legend {
   width: 0%;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent), #ff8f3f);
-  box-shadow: 0 0 18px rgba(255, 59, 48, 0.25);
+  background: linear-gradient(90deg, var(--accent), var(--accent-alt));
+  box-shadow: 0 0 18px rgba(var(--accent-rgb), 0.25);
   transition: width 260ms var(--ease);
 }
 
@@ -720,7 +799,7 @@ legend {
       rgba(255, 255, 255, 0.36) 45%,
       transparent 70%
     ),
-    linear-gradient(90deg, var(--accent), #ff8f3f);
+    linear-gradient(90deg, var(--accent), var(--accent-alt));
   background-size: 46px 100%, 100% 100%;
   animation: shimmer 1s linear infinite;
 }
@@ -871,7 +950,7 @@ legend {
 }
 
 .queue-item[data-state="running"] {
-  border-color: rgba(255, 59, 48, 0.48);
+  border-color: rgba(var(--accent-rgb), 0.48);
 }
 
 .queue-item[data-state="done"] {
@@ -939,10 +1018,10 @@ legend {
 @keyframes pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 5px rgba(255, 59, 48, 0.16);
+    box-shadow: 0 0 0 5px rgba(var(--accent-rgb), 0.16);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(255, 59, 48, 0.05);
+    box-shadow: 0 0 0 8px rgba(var(--accent-rgb), 0.05);
   }
 }
 
@@ -952,6 +1031,85 @@ legend {
   }
   to {
     background-position: 46px 0, 0 0;
+  }
+}
+
+@keyframes platform-sweep {
+  0% {
+    opacity: 0;
+    transform: translateX(-115%);
+  }
+  22%,
+  62% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(115%);
+  }
+}
+
+@keyframes platform-sweep-back {
+  0% {
+    opacity: 0;
+    transform: translateX(115%);
+  }
+  22%,
+  62% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-115%);
+  }
+}
+
+@keyframes platform-panel-swap {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  35% {
+    border-color: rgba(var(--accent-rgb), 0.42);
+    box-shadow: 0 28px 78px rgba(var(--accent-rgb), 0.14);
+    transform: translateY(-4px) scale(0.995);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes platform-switch-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.018);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes selected-pill-pop {
+  0% {
+    transform: scale(0.96);
+  }
+  55% {
+    transform: scale(1.035);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes platform-text-swap {
+  0% {
+    opacity: 0.58;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
