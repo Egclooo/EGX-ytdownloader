@@ -72,7 +72,19 @@ const platformConfig = {
     unreachableError: "This TikTok link could not be reached.",
     pattern: /^(https?:\/\/)?((www|m|vm|vt)\.)?tiktok\.com\/.+/i,
   },
+  instagram: {
+    title: "Insta Downloader",
+    documentTitle: "Insta Downloader",
+    urlLabel: "Instagram URL",
+    placeholder: "https://www.instagram.com/reel/...",
+    emptyError: "Paste at least one Instagram link.",
+    invalidError: "Invalid Instagram link",
+    unreachableError: "This Instagram link could not be reached.",
+    pattern: /^(https?:\/\/)?(www\.)?(instagram\.com|instagr\.am)\/.+/i,
+  },
 };
+
+const platformOrder = ["youtube", "tiktok", "instagram"];
 
 let pollHandle = null;
 let activeDownload = null;
@@ -343,6 +355,7 @@ function platformLabel(platform) {
   return {
     youtube: "YouTube",
     tiktok: "TikTok",
+    instagram: "Instagram",
   }[platform] || "YouTube";
 }
 
@@ -469,7 +482,7 @@ function setPlatform(platform, { save = true, animate = true } = {}) {
   setUrlError("");
 
   if (animate && previous !== normalized) {
-    runPlatformChangeAnimation(normalized);
+    runPlatformChangeAnimation(previous, normalized);
   }
 
   if (save) {
@@ -477,10 +490,17 @@ function setPlatform(platform, { save = true, animate = true } = {}) {
   }
 }
 
-function runPlatformChangeAnimation(next) {
+function runPlatformChangeAnimation(previous, next) {
+  const previousIndex = platformOrder.indexOf(previous);
+  const nextIndex = platformOrder.indexOf(next);
+  const direction =
+    previousIndex >= 0 && nextIndex >= 0 && nextIndex > previousIndex
+      ? "forward"
+      : "back";
+
   clearTimeout(platformAnimationHandle);
   document.body.classList.remove("is-platform-changing");
-  document.body.dataset.transitionDirection = next === "tiktok" ? "forward" : "back";
+  document.body.dataset.transitionDirection = direction;
   void document.body.offsetWidth;
   document.body.classList.add("is-platform-changing");
   platformAnimationHandle = setTimeout(() => {

@@ -70,10 +70,15 @@ PLATFORM_URL_RE = {
         r"^(https?://)?((www|m|vm|vt)\.)?tiktok\.com/.+",
         re.IGNORECASE,
     ),
+    "instagram": re.compile(
+        r"^(https?://)?(www\.)?(instagram\.com|instagr\.am)/.+",
+        re.IGNORECASE,
+    ),
 }
 PLATFORM_LABELS = {
     "youtube": "YouTube",
     "tiktok": "TikTok",
+    "instagram": "Instagram",
 }
 
 
